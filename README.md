@@ -1,4 +1,4 @@
-# vetorez
+# Convertor
 
 Webová aplikace, která z Wordu nebo PDF vytáhne text, rozdělí ho na věty
 a vrátí ke stažení jako CSV (jedna věta = jeden řádek).
