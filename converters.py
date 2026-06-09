@@ -31,9 +31,18 @@ class UnsupportedFormat(ValueError):
 
 
 def _from_pdf(stream):
+    pending = ""
     with pdfplumber.open(stream) as pdf:
         for page in pdf.pages:
-            yield from (page.extract_text() or "").splitlines()
+            for line in (page.extract_text() or "").splitlines():
+                if pending:
+                    if pending.endswith("-") and pending[-2:-1].islower():
+                        pending = pending[:-1] + line
+                        continue
+                    yield pending
+                pending = line
+    if pending:
+        yield pending
 
 
 def _from_docx(stream):
@@ -45,9 +54,14 @@ def _from_docx(stream):
             yield " ".join(cell.text for cell in row.cells)
 
 
+def _from_txt(stream):
+    yield from stream.read().decode("utf-8-sig").splitlines()
+
+
 _EXTRACTORS = {
     ".pdf": _from_pdf,
     ".docx": _from_docx,
+    ".txt": _from_txt,
 }
 
 SUPPORTED_EXTENSIONS = set(_EXTRACTORS)

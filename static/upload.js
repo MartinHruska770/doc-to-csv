@@ -16,6 +16,11 @@
 
     input.addEventListener("change", reflectSelection);
 
+    document.querySelector("form").addEventListener("submit", () => {
+        submit.textContent = "Zpracovávám…";
+        submit.disabled = true;
+    });
+
     ["dragover", "dragenter"].forEach((type) =>
         dropzone.addEventListener(type, (event) => {
             event.preventDefault();

@@ -25,12 +25,12 @@
                 </svg>
                 <span id="prompt">Klikni nebo sem přetáhni soubor</span>
                 <span class="filename" id="filename"></span>
-                <input type="file" name="soubor" id="file-input" accept=".pdf,.docx" required>
+                <input type="file" name="soubor" id="file-input" accept=".pdf,.docx,.txt" required>
             </label>
             <button type="submit" id="submit" disabled>Převést a stáhnout CSV</button>
         </form>
 
-        <p class="formats">Podporované formáty: PDF, DOCX · max. 25 MB</p>
+        <p class="formats">Podporované formáty: PDF, DOCX, TXT · max. 25 MB</p>
     </main>
 
     <script src="{{ url_for('static', filename='upload.js') }}"></script>

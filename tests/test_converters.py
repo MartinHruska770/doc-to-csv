@@ -109,7 +109,19 @@ def test_sentences_to_csv_empty():
 
 def test_unknown_extension_raises():
     with pytest.raises(UnsupportedFormat):
-        list(extract_lines(io.BytesIO(b""), ".txt"))
+        list(extract_lines(io.BytesIO(b""), ".odt"))
+
+
+def test_extract_txt_plain():
+    data = "První věta. Druhá věta.".encode("utf-8")
+    sentences = list(split_sentences(extract_lines(io.BytesIO(data), ".txt")))
+    assert sentences == ["První věta.", "Druhá věta."]
+
+
+def test_extract_txt_with_bom():
+    data = "﻿První věta.".encode("utf-8")
+    sentences = list(split_sentences(extract_lines(io.BytesIO(data), ".txt")))
+    assert "První věta." in sentences
 
 
 def test_extract_docx_reads_paragraphs_and_tables():
