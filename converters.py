@@ -31,18 +31,28 @@ class UnsupportedFormat(ValueError):
 
 
 def _from_pdf(stream):
-    pending = ""
+    """Vydává řádky (de-hyphenované) a prázdné řetězce na hranicích odstavců."""
     with pdfplumber.open(stream) as pdf:
         for page in pdf.pages:
-            for line in (page.extract_text() or "").splitlines():
-                if pending:
-                    if pending.endswith("-") and pending[-2:-1].islower():
-                        pending = pending[:-1] + line
-                        continue
-                    yield pending
-                pending = line
-    if pending:
-        yield pending
+            pending = None
+            for raw in (page.extract_text(layout=True) or "").splitlines():
+                stripped = raw.strip()
+                if not stripped:
+                    # prázdný řádek = hranice odstavce
+                    if pending is not None:
+                        yield pending
+                        pending = None
+                    yield ""
+                elif pending is not None and pending.endswith("-") and pending[-2:-1].islower():
+                    pending = pending[:-1] + stripped  # de-hyphenace
+                else:
+                    if pending is not None:
+                        yield pending
+                    pending = stripped
+            if pending is not None:
+                yield pending
+                pending = None
+            yield ""  # konec stránky = hranice odstavce
 
 
 def _from_docx(stream):
@@ -70,6 +80,49 @@ SUPPORTED_EXTENSIONS = set(_EXTRACTORS)
 def extract_lines(stream: BinaryIO, extension: str) -> Iterator[str]:
     try:
         extractor = _EXTRACTORS[extension.lower()]
+    except KeyError as exc:
+        raise UnsupportedFormat(extension) from exc
+    return extractor(stream)
+
+
+def _paragraphs_from_lines(lines: Iterable[str]) -> Iterator[str]:
+    """Seskupí řádky do odstavců – předěl tvoří prázdný řádek."""
+    buffer: list[str] = []
+    for line in lines:
+        stripped = line.strip()
+        if stripped:
+            buffer.append(stripped)
+        elif buffer:
+            yield " ".join(buffer)
+            buffer = []
+    if buffer:
+        yield " ".join(buffer)
+
+
+def _paragraphs_from_docx(stream):
+    document = Document(stream)
+    for paragraph in document.paragraphs:
+        text = paragraph.text.strip()
+        if text:
+            yield text
+    for table in document.tables:
+        for row in table.rows:
+            text = " ".join(cell.text for cell in row.cells).strip()
+            if text:
+                yield text
+
+
+_PARAGRAPH_EXTRACTORS = {
+    ".pdf": lambda stream: _paragraphs_from_lines(_from_pdf(stream)),
+    ".docx": _paragraphs_from_docx,
+    ".txt": lambda stream: _paragraphs_from_lines(_from_txt(stream)),
+}
+
+
+def extract_paragraphs(stream: BinaryIO, extension: str) -> Iterator[str]:
+    """Vrací jednotlivé odstavce dokumentu (jednotka pro anotaci metafor)."""
+    try:
+        extractor = _PARAGRAPH_EXTRACTORS[extension.lower()]
     except KeyError as exc:
         raise UnsupportedFormat(extension) from exc
     return extractor(stream)
@@ -113,3 +166,26 @@ def sentences_to_csv(sentences: Iterable[str]) -> str:
         writer.writerow([sentence])
     data = buffer.getvalue()
     return BOM + data if data else ""
+
+
+def units_to_csv(units: Iterable[str], prefix: str = "") -> str:
+    """CSV pro anotaci: hlavička ``id,text`` a jeden očíslovaný odstavec na řádek.
+
+    ``prefix`` umožní jednoznačné ID i po sloučení více dokumentů
+    (``zprava-1``, ``zprava-2`` …); bez něj jsou ID prostá čísla.
+    """
+    buffer = io.StringIO()
+    writer = csv.writer(buffer)
+    count = 0
+    for unit in units:
+        text = unit.strip()
+        if not text:
+            continue
+        count += 1
+        identifier = f"{prefix}-{count}" if prefix else str(count)
+        writer.writerow([identifier, text])
+    if not count:
+        return ""
+    header = io.StringIO()
+    csv.writer(header).writerow(["id", "text"])
+    return BOM + header.getvalue() + buffer.getvalue()

@@ -8,9 +8,8 @@ from werkzeug.utils import secure_filename
 from converters import (
     SUPPORTED_EXTENSIONS,
     UnsupportedFormat,
-    extract_lines,
-    sentences_to_csv,
-    split_sentences,
+    extract_paragraphs,
+    units_to_csv,
 )
 
 app = Flask(__name__)
@@ -30,9 +29,10 @@ def convert():
         flash("Nevybral jsi žádný soubor.")
         return redirect(url_for("index"))
 
+    stem = Path(secure_filename(upload.filename)).stem or "dokument"
     try:
-        lines = extract_lines(upload.stream, Path(upload.filename).suffix)
-        csv_text = sentences_to_csv(split_sentences(lines))
+        paragraphs = extract_paragraphs(upload.stream, Path(upload.filename).suffix)
+        csv_text = units_to_csv(paragraphs, prefix=stem)
     except UnsupportedFormat:
         flash("Podporované formáty: " + ", ".join(sorted(SUPPORTED_EXTENSIONS)))
         return redirect(url_for("index"))
@@ -45,7 +45,6 @@ def convert():
         flash("V dokumentu se nenašel žádný text k převodu.")
         return redirect(url_for("index"))
 
-    stem = Path(secure_filename(upload.filename)).stem or "dokument"
     return send_file(
         io.BytesIO(csv_text.encode("utf-8")),
         mimetype="text/csv; charset=utf-8",

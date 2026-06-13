@@ -6,8 +6,10 @@ from docx import Document
 from converters import (
     UnsupportedFormat,
     extract_lines,
+    extract_paragraphs,
     sentences_to_csv,
     split_sentences,
+    units_to_csv,
 )
 
 
@@ -122,6 +124,61 @@ def test_extract_txt_with_bom():
     data = "﻿První věta.".encode("utf-8")
     sentences = list(split_sentences(extract_lines(io.BytesIO(data), ".txt")))
     assert "První věta." in sentences
+
+
+def test_from_pdf_emits_blank_lines_at_paragraph_boundaries():
+    """_paragraphs_from_lines musí dostat prázdné řetězce, jinak vše skončí v jednom řádku."""
+    from converters import _paragraphs_from_lines
+
+    # Simulace výstupu _from_pdf: řádky + prázdné oddělovače
+    fake_lines = ["Čas jsou peníze.", "Utíká nám.", "", "Pohřbil ten nápad.", ""]
+    paragraphs = list(_paragraphs_from_lines(fake_lines))
+    assert paragraphs == [
+        "Čas jsou peníze. Utíká nám.",
+        "Pohřbil ten nápad.",
+    ], "bez prázdného řádku by obojí skončilo v jednom odstavci"
+
+
+def test_paragraphs_from_txt_split_on_blank_lines():
+    data = "První odstavec.\nDruhý řádek.\n\nDruhý odstavec.".encode("utf-8")
+    assert list(extract_paragraphs(io.BytesIO(data), ".txt")) == [
+        "První odstavec. Druhý řádek.",
+        "Druhý odstavec.",
+    ]
+
+
+def test_extract_paragraphs_docx_keeps_paragraph_units():
+    def build(doc):
+        doc.add_paragraph("První odstavec. Má dvě věty.")
+        doc.add_paragraph("Druhý odstavec.")
+
+    assert list(extract_paragraphs(_docx_bytes(build), ".docx")) == [
+        "První odstavec. Má dvě věty.",
+        "Druhý odstavec.",
+    ]
+
+
+def test_units_to_csv_has_header_and_ids():
+    csv_text = units_to_csv(["První odstavec.", "Druhý odstavec."])
+    assert csv_text.splitlines() == [
+        "﻿id,text",
+        "1,První odstavec.",
+        "2,Druhý odstavec.",
+    ]
+
+
+def test_units_to_csv_prefix_makes_ids_unique():
+    csv_text = units_to_csv(["Text."], prefix="zprava")
+    assert csv_text.splitlines() == ["﻿id,text", "zprava-1,Text."]
+
+
+def test_units_to_csv_skips_blank_and_renumbers():
+    csv_text = units_to_csv(["A.", "   ", "B."])
+    assert csv_text.splitlines() == ["﻿id,text", "1,A.", "2,B."]
+
+
+def test_units_to_csv_empty():
+    assert units_to_csv([]) == ""
 
 
 def test_extract_docx_reads_paragraphs_and_tables():
